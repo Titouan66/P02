@@ -1,0 +1,733 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+#boutons-haut {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+
+#bouton-gps,
+#bouton-carburant {
+  padding: 10px 14px;
+  border: none;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#bouton-gps[aria-expanded="true"],
+#bouton-carburant[aria-expanded="true"] {
+  background: #1d4ed8;
+  color: #fff;
+}
+
+#panneau[hidden] { display: none; }
+
+#panneau {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  z-index: 1;
+  width: 300px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* Onglets */
+.onglets {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 3px;
+  background: #eee;
+  border-radius: 8px;
+}
+#panneau .onglets button {
+  flex: 1;
+  padding: 7px;
+  border: none;
+  background: transparent;
+  font-weight: 600;
+  color: #555;
+}
+#panneau .onglets button[aria-selected="true"] {
+  background: #fff;
+  color: #111;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+#panneau [role="tabpanel"][hidden] { display: none; }
+
+/* Lignes avec interrupteur */
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 2px;
+  border-bottom: 1px solid #eee;
+  font-size: 15px;
+  cursor: pointer;
+}
+.option:last-child { border-bottom: none; }
+
+.option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: #c8c8c8;
+  transition: background 0.15s;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+.option input:checked + .switch { background: #1d4ed8; }
+.option input:checked + .switch::after { transform: translateX(18px); }
+.option input:focus-visible + .switch { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+
+.champ {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.champ input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.pastille {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.pastille.depart { background: #74e08a; } /* vert clair ; la couleur exacte est posée par main.js (dégradé) */
+.pastille.arrivee { background: #14532d; } /* vert foncé */
+
+.ligne {
+  display: flex;
+  gap: 6px;
+}
+
+#panneau select,
+#panneau button {
+  padding: 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+#ma-position,
+#pointer-arrivee { padding: 8px 10px; font-size: 16px; line-height: 1; }
+
+/* Champ qui recevra le prochain clic sur la carte */
+.champ input.actif {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.25);
+}
+#map.pointage { cursor: crosshair; }
+#map.pointage .maplibregl-canvas { cursor: crosshair; }
+
+#panneau #demarrer {
+  width: 100%;
+  margin-top: 6px;
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Icône de position (voir fleche.svg) */
+.position-actuelle img {
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+
+/* Bandeau de navigation */
+#bandeau {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
+  padding: 10px 16px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#bandeau[hidden] { display: none; }
+
+/* Bandeau du haut : prochaine direction */
+#bandeau-haut {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 56px; /* laisse la place aux boutons de zoom */
+  max-width: 520px;
+  margin: 0 auto;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #1d4ed8;
+  color: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#bandeau-haut[hidden] { display: none; }
+#schema { flex: none; width: 72px; height: 72px; }
+#schema svg { display: block; }
+#bandeau-haut .texte {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+#prochaine-distance { font-size: 26px; line-height: 1.1; }
+#prochaine-instruction {
+  font-size: 15px;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Pendant la navigation, le bouton GPS laisse la place au bandeau */
+body.navigation #boutons-haut,
+body.navigation #panneau-carburant { display: none; }
+
+/* Panneau de limitation de vitesse (cercle rouge) */
+#bandeau .limite {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  box-sizing: border-box;
+  border: 5px solid #d62828;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  font-size: 17px;
+  font-weight: 800;
+}
+#bandeau .limite[hidden] { display: none; }
+
+#bandeau .bloc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 56px;
+}
+#bandeau strong { font-size: 20px; white-space: nowrap; }
+#bandeau span { font-size: 12px; color: #666; }
+
+#arreter {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#panneau #calculer {
+  flex: 1;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+#resultat {
+  margin: 10px 0 0;
+  font-size: 14px;
+  min-height: 1.2em;
+}
+#resultat.erreur { color: #b91c1c; }
+
+/* ---------------------------------------------------------------
+   Carburant : menu de filtrage et marqueurs de stations (repris de P01)
+   --------------------------------------------------------------- */
+#panneau-carburant[hidden] { display: none; }
+
+#panneau-carburant {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100% - 84px);
+  box-sizing: border-box;
+  padding: 12px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.carbu-ligne {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#carbu-lieu {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  font-size: 14px;
+}
+#carbu-lieu:focus,
+#carbu-type:focus { outline: none; border-color: #1d4ed8; }
+
+#carbu-localiser,
+#carbu-chercher {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+#carbu-chercher { background: #0b3d91; }
+#carbu-localiser:disabled,
+#carbu-chercher:disabled { opacity: 0.6; cursor: default; }
+
+#carbu-type {
+  flex: none;
+  padding: 7px 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.carbu-prix {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+  color: #555;
+}
+.carbu-prix strong { color: #0b3d91; }
+.carbu-prix input { width: 100%; margin: 0; accent-color: #1d4ed8; cursor: pointer; }
+
+#carbu-statut {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 13px;
+  color: #666;
+}
+
+.carbu-titre {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0b3d91;
+}
+
+#carbu-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px 2px;
+}
+
+.carte-station {
+  padding: 8px 10px;
+  border: 1px solid #e0e4e9;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.carte-station:hover {
+  border-color: #4fa3e3;
+  box-shadow: 0 2px 8px rgba(21, 101, 192, 0.15);
+}
+.carte-station h3 { margin: 0 0 2px; font-size: 14px; color: #0b3d91; }
+.carte-station .adresse { font-size: 12px; color: #6b7280; margin-bottom: 6px; }
+.carte-station .pied { display: flex; align-items: center; gap: 8px; }
+.carte-station .prix {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f3f4f6;
+  color: #0b3d91;
+  font-size: 13px;
+  font-weight: 700;
+}
+.carte-station .distance { flex: 1; font-size: 12px; font-weight: 600; color: #6b7280; }
+.carte-station .aller {
+  padding: 4px 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  cursor: pointer;
+}
+.aucune { padding: 16px; text-align: center; font-style: italic; color: #6b7280; }
+
+/* Marqueur de prix (bulle avec pointe) */
+.marqueur-station { cursor: pointer; }
+.marqueur-station .bulle {
+  position: relative;
+  padding: 4px 9px;
+  border: 2px solid #fff;
+  border-radius: 14px;
+  background: #1565c0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.marqueur-station .bulle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  border-width: 7px 6px 0 6px;
+  border-style: solid;
+  border-color: #1565c0 transparent transparent transparent;
+}
+.marqueur-station:hover .bulle { background: #0b3d91; }
+.marqueur-station:hover .bulle::after { border-top-color: #0b3d91; }
+
+.marqueur-utilisateur {
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #e53935;
+  box-shadow: 0 0 0 4px rgba(229, 57, 53, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Bulle d'information d'une station */
+.popup-station h3 { margin: 0 0 4px; font-size: 15px; color: #0b3d91; }
+.popup-station .adresse { margin-bottom: 8px; font-size: 12px; color: #6b7280; }
+.popup-station .prix {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #1565c0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.popup-station .aller {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.popup-station .maj { margin-top: 6px; font-size: 11px; color: #6b7280; }
+
+/* ---------------------------------------------------------------
+   Navigation : stations-service sur le trajet
+   --------------------------------------------------------------- */
+/* Bouton à gauche, aligné sur le bandeau du bas */
+#stations-route {
+  position: absolute;
+  left: 12px;
+  bottom: 40px;
+  z-index: 2;
+  height: 66px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 14px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+#stations-route[aria-expanded="true"] { background: #0b3d91; }
+body:not(.navigation) #stations-route { display: none; }
+
+/* Liste à gauche de l'écran, juste au-dessus du bouton */
+#panneau-route {
+  position: absolute;
+  left: 12px;
+  bottom: 118px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100% - 250px);
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#panneau-route[hidden],
+body:not(.navigation) #panneau-route { display: none; }
+
+.route-tete { display: flex; align-items: center; gap: 6px; }
+.route-tete strong { flex: 1; font-size: 15px; color: #0b3d91; }
+.route-tete select,
+.route-tete button {
+  padding: 5px 8px;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  cursor: pointer;
+}
+.route-tete button:disabled { opacity: 0.5; cursor: default; }
+
+#route-statut { margin: 0; min-height: 1.2em; font-size: 12px; color: #666; }
+
+#route-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.resultat-route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e0e4e9;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.resultat-route:hover { border-color: #16a34a; box-shadow: 0 2px 8px rgba(22, 163, 74, 0.2); }
+.resultat-route .rang {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 24px;
+  text-align: center;
+}
+.resultat-route .infos { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.resultat-route .infos strong,
+.resultat-route .infos .adresse {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.resultat-route .infos strong { font-size: 14px; color: #111; }
+.resultat-route .infos .adresse { font-size: 11px; color: #6b7280; }
+.resultat-route .chiffres { flex: none; display: flex; flex-direction: column; align-items: flex-end; }
+.resultat-route .prix { font-size: 15px; font-weight: 700; color: #0b3d91; }
+.resultat-route .detour { font-size: 12px; font-weight: 600; color: #b45309; white-space: nowrap; }
+
+/* Stations proposées sur le trajet : bulles vertes */
+.marqueur-station.route { z-index: 1; }
+.marqueur-station.route .bulle { background: #16a34a; }
+.marqueur-station.route .bulle::after { border-top-color: #16a34a; }
+.popup-station .detour { margin-top: 6px; font-size: 13px; font-weight: 700; color: #b45309; }
+
+/* Petits écrans : le bandeau occupe toute la largeur, le bouton passe au-dessus */
+@media (max-width: 800px) {
+  #stations-route { bottom: 118px; height: 44px; border-radius: 12px; }
+  #panneau-route { bottom: 172px; max-height: calc(100% - 300px); }
+}
+
+/* ---------------------------------------------------------------
+   Étapes du trajet
+   --------------------------------------------------------------- */
+.pastille.etape { background: #43a05e; }
+
+#panneau #ajouter-etape {
+  display: block;
+  width: 100%;
+  margin: -2px 0 8px;
+  padding: 6px;
+  border: 1px dashed #b5b5b5;
+  background: transparent;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+#panneau #ajouter-etape:hover { background: #f1f5ff; }
+
+#panneau .retirer-etape {
+  flex: none;
+  padding: 7px 9px;
+  font-size: 13px;
+  line-height: 1;
+  color: #b91c1c;
+}
+
+/* Bouton « Ajouter au trajet » des stations */
+.resultat-route .ajouter {
+  flex: none;
+  padding: 6px 9px;
+  border: none;
+  border-radius: 8px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.resultat-route .ajouter:disabled { opacity: 0.5; cursor: default; }
+.popup-station .ajouter {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  background: #15803d;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Étape déjà dépassée pendant la navigation */
+.maplibregl-marker.etape-passee { filter: grayscale(1) opacity(0.5); }
+
+/* Poignée « ≡ » pour réordonner les étapes (à gauche de chaque étape) */
+.champ .poignee {
+  flex: none;
+  width: 18px;
+  color: #8b8b8b;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.champ .poignee:hover,
+.champ .poignee:focus-visible { color: #15803d; outline: none; }
+.champ.deplacee {
+  position: relative;
+  z-index: 3;
+  margin-left: -4px;
+  margin-right: -4px;
+  padding: 3px 4px;
+  will-change: transform;
+  border-radius: 8px;
+  background: #f0fdf4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+body.glisse-lieu,
+body.glisse-lieu * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+
+/* ---------------------------------------------------------------
+   Mode simulation (voiture virtuelle)
+   --------------------------------------------------------------- */
+#simulation-controle {
+  position: absolute;
+  right: 12px;
+  bottom: 40px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 66px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+body:not(.simulation) #simulation-controle { display: none; }
+#simulation-controle span { font-size: 12px; font-weight: 600; color: #666; }
+#simulation-controle button {
+  min-width: 42px;
+  padding: 8px 10px;
+  border: 1px solid #c8c8c8;
+  border-radius: 8px;
+  background: #f5f5f5;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 800px) {
+  #simulation-controle { bottom: 118px; height: 44px; border-radius: 12px; }
+}

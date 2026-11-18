@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Application MapLibre</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="boutons-haut">
+    <button type="button" id="bouton-gps" aria-expanded="false" aria-controls="panneau">
+      <span aria-hidden="true">🧭</span> GPS
+    </button>
+    <button type="button" id="bouton-carburant" aria-expanded="false" aria-controls="panneau-carburant">
+      <span aria-hidden="true">⛽</span> Carburant
+    </button>
+  </div>
+
+  <!-- Menu de filtrage des stations-service (repris de P01) -->
+  <div id="panneau-carburant" hidden>
+    <div class="carbu-ligne">
+      <button type="button" id="carbu-localiser" title="Localiser ma position" aria-label="Localiser ma position">📍</button>
+      <input id="carbu-lieu" type="text" placeholder="Ville, code postal ou département" autocomplete="off" />
+      <button type="button" id="carbu-chercher" title="Rechercher" aria-label="Rechercher">🔍</button>
+    </div>
+    <div class="carbu-ligne">
+      <select id="carbu-type" aria-label="Type de carburant">
+        <option value="sp95">SP95</option>
+        <option value="sp98">SP98</option>
+        <option value="gazole">Gazole</option>
+        <option value="e10">E10</option>
+        <option value="e85">E85</option>
+        <option value="gpl">GPL</option>
+      </select>
+      <label class="carbu-prix">
+        <span>Prix max : <strong id="carbu-prix-label">–</strong></span>
+        <input type="range" id="carbu-prix-max" step="0.01" />
+      </label>
+    </div>
+    <p id="carbu-statut" role="status"></p>
+    <div class="carbu-titre">Liste des stations</div>
+    <div id="carbu-liste"></div>
+  </div>
+
+  <form id="panneau" autocomplete="off" hidden>
+    <div class="onglets" role="tablist">
+      <button type="button" role="tab" id="onglet-btn-itineraire" aria-selected="true" aria-controls="onglet-itineraire">Itinéraire</button>
+      <button type="button" role="tab" id="onglet-btn-eviter" aria-selected="false" aria-controls="onglet-eviter">Éviter</button>
+    </div>
+
+    <div id="onglet-eviter" role="tabpanel" hidden>
+      <label class="option">
+        <span>Péages</span>
+        <input type="checkbox" role="switch" id="eviter-peages" />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+      <label class="option">
+        <span>Autoroutes</span>
+        <input type="checkbox" role="switch" id="eviter-autoroutes" />
+        <span class="switch" aria-hidden="true"></span>
+      </label>
+    </div>
+
+    <div id="onglet-itineraire" role="tabpanel">
+
+    <label class="champ">
+      <span class="poignee" role="button" tabindex="0" title="Glisser pour changer l'ordre" aria-label="Déplacer ce lieu (glisser, ou flèches haut / bas)">≡</span>
+      <span class="pastille depart"></span>
+      <input id="depart" type="text" placeholder="Départ (adresse ou clic sur la carte)" />
+      <button type="button" id="ma-position" title="Utiliser ma position">⌖</button>
+    </label>
+
+    <label class="champ">
+      <span class="poignee" role="button" tabindex="0" title="Glisser pour changer l'ordre" aria-label="Déplacer ce lieu (glisser, ou flèches haut / bas)">≡</span>
+      <span class="pastille arrivee"></span>
+      <input id="arrivee" type="text" placeholder="Arrivée (adresse ou clic sur la carte)" />
+      <button type="button" id="pointer-arrivee" title="Pointer l'arrivée sur la carte">📍</button>
+    </label>
+
+    <button type="button" id="ajouter-etape" title="Ajouter une étape avant l'arrivée">+ Ajouter une étape</button>
+
+    <div class="ligne">
+      <button type="submit" id="calculer">Calculer</button>
+      <button type="button" id="effacer">Effacer</button>
+    </div>
+    <button type="button" id="demarrer">▶ Démarrer</button>
+    <label class="option">
+      <span>Simuler le déplacement</span>
+      <input type="checkbox" role="switch" id="simulation" />
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+
+    <p id="resultat" role="status"></p>
+    </div>
+  </form>
+
+  <div id="bandeau-haut" hidden>
+    <div id="schema" aria-hidden="true"></div>
+    <div class="texte">
+      <strong id="prochaine-distance"></strong>
+      <span id="prochaine-instruction"></span>
+    </div>
+  </div>
+
+  <div id="bandeau" hidden>
+    <div id="bandeau-limite" class="limite" title="Limitation de vitesse (km/h)" hidden></div>
+    <div class="bloc"><strong id="bandeau-distance">–</strong><span>restant</span></div>
+    <div class="bloc"><strong id="bandeau-temps">–</strong><span>durée</span></div>
+    <div class="bloc"><strong id="bandeau-arrivee">–</strong><span>arrivée</span></div>
+    <button type="button" id="arreter">Arrêter</button>
+  </div>
+
+  <!-- Commandes de la voiture virtuelle (mode simulation) -->
+  <div id="simulation-controle">
+    <span>Simulation</span>
+    <button type="button" id="simulation-pause" title="Mettre en pause">⏸</button>
+    <button type="button" id="simulation-vitesse" title="Changer la vitesse">×1</button>
+  </div>
+
+  <!-- À gauche du bandeau, pendant la navigation -->
+  <button type="button" id="stations-route" aria-expanded="false" aria-controls="panneau-route" title="Stations-service sur mon trajet">⛽ Stations</button>
+
+  <!-- Pendant la navigation : stations-service qui font perdre le moins de temps -->
+  <div id="panneau-route" hidden>
+    <div class="route-tete">
+      <strong>Stations sur le trajet</strong>
+      <select id="route-type" aria-label="Type de carburant">
+        <option value="sp95">SP95</option>
+        <option value="sp98">SP98</option>
+        <option value="gazole">Gazole</option>
+        <option value="e10">E10</option>
+        <option value="e85">E85</option>
+        <option value="gpl">GPL</option>
+      </select>
+      <button type="button" id="route-actualiser" title="Actualiser" aria-label="Actualiser">↻</button>
+      <button type="button" id="route-fermer" title="Fermer" aria-label="Fermer">✕</button>
+    </div>
+    <p id="route-statut" role="status"></p>
+    <ol id="route-liste"></ol>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="main.js"></script>
+  <script src="carburant.js"></script>
+</body>
+</html>

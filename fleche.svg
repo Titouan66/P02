@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Icône de position (flèche vers le haut = direction du déplacement).
+     Remplace ce fichier par ton propre SVG/PNG (ou change ICONE_POSITION dans main.js).
+     Garde l'icône orientée vers le HAUT : elle est tournée automatiquement selon le cap. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <polygon points="24,3 41,43 24,34 7,43"
+           fill="#1d4ed8" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" />
+</svg>
