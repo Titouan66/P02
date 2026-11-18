@@ -2,7 +2,8 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- La page ne se zoome jamais (seule la carte se zoome) : voir aussi style.css et main.js -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Application MapLibre</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="style.css" />
@@ -41,8 +42,9 @@
       </label>
     </div>
     <p id="carbu-statut" role="status"></p>
-    <div class="carbu-titre">Liste des stations</div>
-    <div id="carbu-liste"></div>
+    <!-- Liste repliée par défaut : la carte reste visible -->
+    <button type="button" id="carbu-afficher-liste" class="carbu-titre" aria-expanded="false" aria-controls="carbu-liste">› Afficher la liste</button>
+    <div id="carbu-liste" hidden></div>
   </div>
 
   <form id="panneau" autocomplete="off" hidden>
@@ -97,6 +99,26 @@
     </div>
   </form>
 
+  <!-- GPS, étape 1 : choix d'un lieu (départ, puis arrivée, ou étape) dans un bandeau en bas de l'écran -->
+  <form id="selection" autocomplete="off" hidden>
+    <div class="selection-tete">
+      <span class="pastille" id="selection-pastille"></span>
+      <strong id="selection-titre">Point de départ</strong>
+      <button type="button" id="selection-annuler" title="Annuler" aria-label="Annuler">✕</button>
+    </div>
+    <div class="selection-ligne">
+      <input id="selection-adresse" type="text" placeholder="Adresse" enterkeyhint="search" aria-label="Adresse" />
+      <button type="button" id="selection-position" title="Ma position actuelle" aria-label="Utiliser ma position actuelle">⌖</button>
+      <button type="button" id="selection-carte" title="Choisir sur la carte" aria-label="Choisir un point sur la carte" aria-pressed="false">📍</button>
+    </div>
+  </form>
+
+  <!-- Messages du GPS (recherche en cours, erreurs) quand le menu détaillé est fermé -->
+  <p id="gps-message" role="status"></p>
+
+  <!-- GPS, étape 2 (aperçu du trajet) : à gauche du bandeau, accès au menu détaillé -->
+  <button type="button" id="gps-detail" aria-expanded="false" aria-controls="panneau">› Détail</button>
+
   <div id="bandeau-haut" hidden>
     <div id="schema" aria-hidden="true"></div>
     <div class="texte">
@@ -110,7 +132,8 @@
     <div class="bloc"><strong id="bandeau-distance">–</strong><span>restant</span></div>
     <div class="bloc"><strong id="bandeau-temps">–</strong><span>durée</span></div>
     <div class="bloc"><strong id="bandeau-arrivee">–</strong><span>arrivée</span></div>
-    <button type="button" id="arreter">Arrêter</button>
+    <button type="button" id="lancer">▶ Départ</button><!-- aperçu du trajet -->
+    <button type="button" id="arreter">Arrêter</button><!-- navigation -->
   </div>
 
   <!-- Commandes de la voiture virtuelle (mode simulation) -->

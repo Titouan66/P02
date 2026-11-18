@@ -43,6 +43,7 @@
     prixLabel: document.getElementById("carbu-prix-label"),
     statut: document.getElementById("carbu-statut"),
     liste: document.getElementById("carbu-liste"),
+    afficherListe: document.getElementById("carbu-afficher-liste"),
     localiser: document.getElementById("carbu-localiser"),
     chercher: document.getElementById("carbu-chercher"),
   };
@@ -70,13 +71,22 @@
 
   ui.bouton.addEventListener("click", () => {
     const ouvrir = !panneauOuvert();
-    if (ouvrir && menuOuvert()) boutonGps.click(); // range le menu GPS
+    if (ouvrir && gpsOuvert()) fermerGps(); // range le GPS (le trajet reste sur la carte)
     afficherPanneau(ouvrir);
   });
-  // Ouvrir le menu GPS range le menu carburant
+  // Ouvrir le GPS range le menu carburant (cet écouteur passe après celui de main.js)
   boutonGps.addEventListener("click", () => {
-    if (menuOuvert()) afficherPanneau(false);
+    if (gpsOuvert()) afficherPanneau(false);
   });
+
+  // Liste des stations repliée par défaut (la carte reste visible) : le bouton la déplie / replie.
+  // Les bulles de prix restent sur la carte dans les deux cas.
+  function afficherListeStations(ouvrir) {
+    ui.liste.hidden = !ouvrir;
+    ui.afficherListe.setAttribute("aria-expanded", String(ouvrir));
+    ui.afficherListe.textContent = ouvrir ? "⌄ Masquer la liste" : "› Afficher la liste";
+  }
+  ui.afficherListe.addEventListener("click", () => afficherListeStations(ui.liste.hidden));
 
   // Décalage horizontal pour que le point visé ne soit pas caché sous le menu
   const decalage = () => [panneauOuvert() || menuOuvert() ? 160 : 0, 0];
@@ -204,8 +214,7 @@
       }
       popup.remove();
       afficherPanneau(false);
-      if (!menuOuvert()) boutonGps.click();
-      afficherOnglet("itineraire");
+      ouvrirGps(); // aperçu du trajet (les chiffres se mettent à jour une fois l'étape ajoutée)
       await ajouterEtapeAuTrajet(lngLat, texte, along);
     } finally {
       ajoutEnCours = false;
@@ -241,14 +250,12 @@
     }
 
     afficherPanneau(false);
-    if (!menuOuvert()) boutonGps.click();
-    afficherOnglet("itineraire");
     if (points.depart) {
-      calculerTrajet();
+      calculerTrajet(); // nouvelle arrivée : trajet recalculé et montré en entier
+      afficherApercu();
     } else {
-      activer("depart");
-      el.depart.focus();
-      message(`Indique un départ pour aller à ${station.name}`);
+      ouvrirGps(); // bandeau de choix du départ
+      message(`Choisissez un départ pour aller à ${station.name}`);
     }
   }
 

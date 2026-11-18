@@ -7,6 +7,12 @@ Application web **100 % statique** (aucun serveur, aucun build, aucune clé d'AP
 
 L'application est publiée avec GitHub Pages (dépôt `Titouan66/P02`, branche `main`, racine) et utilisée surtout sur téléphone. Interface, commentaires et noms de variables sont **en français**.
 
+Sur téléphone, **la page ne se zoome jamais, seule la carte le fait** : les boutons et les menus restent en place. Plusieurs réglages y contribuent :
+
+- `index.html` : la balise viewport contient `user-scalable=no` ;
+- `style.css` : `touch-action` sur la page et les boutons, et des champs en 16 px sur écran tactile (sinon l'iPhone zoome quand on touche un champ) ;
+- `main.js` : les gestes `gesture*` de Safari sont bloqués.
+
 ## Lancer en local
 
 ```bash
@@ -46,7 +52,13 @@ Aucune clé n'est nécessaire. Ces services publics ont des quotas : à ménager
 ## Fonctionnalités : système GPS (`main.js`)
 
 - **Carte** MapLibre centrée sur Paris, avec contrôles de zoom et de rotation.
-- **Départ / arrivée** : saisie d'une adresse, saisie de coordonnées `lat, lng`, ou clic sur la carte. Après un clic, l'adresse est retrouvée par géocodage inverse (ignorée si elle est à plus de 250 m). Les réponses périmées sont écartées (compteur `requetesAdresse`).
+- **Parcours du bouton « GPS »** (pensé pour le téléphone : la carte reste visible). Le code se trouve dans la section « Interface du GPS » de `main.js` : `ouvrirGps`, `ouvrirSelection`, `afficherApercu`. Les états sont `etatGps` (`ferme`, `selection`, `apercu`) et les classes `selection`, `apercu`, `navigation` et `detail` sur `<body>`.
+  1. Un **bandeau en bas** fait choisir le **départ**. De gauche à droite : un champ d'adresse (validé par la touche Entrée), le bouton ⌖ (position actuelle) et le bouton 📍 (le prochain toucher sur la carte place le point). Un bandeau identique fait ensuite choisir l'**arrivée**. Le ✕ annule.
+  2. **Aperçu** : la carte se recadre sur tout le trajet. Le bandeau du bas affiche la distance, la durée et l'heure d'arrivée, avec « ▶ Départ » à la place de « Arrêter ». À sa gauche, « › Détail » ouvre le menu complet : champs, étapes, onglet « Éviter », simulation, Calculer / Effacer.
+  3. « + Ajouter une étape » ouvre le même bandeau pour choisir l'étape.
+  4. « Arrêter » ramène à l'aperçu. Re-toucher « GPS » range tout, mais le trajet reste sur la carte.
+  - Les messages (recherche en cours, erreurs) s'affichent dans une bulle sous les boutons du haut (`#gps-message`). On la ferme en la touchant.
+- **Départ / arrivée dans le menu détaillé** : saisie d'une adresse, saisie de coordonnées `lat, lng`, ou clic sur la carte quand le menu est ouvert. Après un clic, l'adresse est retrouvée par géocodage inverse (ignorée si elle est à plus de 250 m). Les réponses périmées sont écartées (compteur `requetesAdresse`).
 - **Étapes** : jusqu'à 8 (`MAX_ETAPES`), via « + Ajouter une étape ». Les lieux (départ, étapes, arrivée) se réordonnent par glisser-déposer avec la poignée « ≡ » (ou au clavier avec les flèches).
 - **Onglet « Éviter »** : interrupteurs péages et autoroutes, transmis à Valhalla.
 - **Itinéraire** : tracé en bleu, durée et distance, polyligne décodée (`decoderPolyline6`). Boutons Calculer et Effacer.
@@ -83,7 +95,7 @@ Ce module est issu d'un projet précédent (« P01 ») et a été intégré à l
 - **Carburants** : SP95, SP98, Gazole, E10, E85, GPL (le champ de l'API est `gplc_*`, voir `CHAMPS_API`).
 - **Affichage** : marqueurs HTML avec le prix (posés sur la carte sans toucher au style). On n'affiche que les **50 stations les plus proches du centre de la carte** parmi celles visibles, et **aucune sous le zoom 11**.
 - **Filtre de prix** : curseur « Prix max » dont les bornes sont les percentiles 1 % et 99 % sur toute la France, pour écarter les prix aberrants.
-- **Recherche d'un lieu** : ville, code postal, département ou adresse (Base Adresse Nationale), ou bouton 📍 pour se localiser. Un menu liste les stations trouvées.
+- **Recherche d'un lieu** : ville, code postal, département ou adresse (Base Adresse Nationale), ou bouton 📍 pour se localiser. La liste des stations trouvées est repliée par défaut, pour garder la carte visible : le bouton « › Afficher la liste » la déplie. Les bulles de prix restent sur la carte dans les deux cas.
 - **Bulle d'information** d'une station : nom, adresse, prix, date de relevé. Hors navigation, un bouton « 🧭 Y aller » en fait la destination (`allerA`), et si une arrivée est déjà définie, « ➕ Ajouter au trajet » l'insère comme étape. Depuis la liste « sur le trajet », la bulle affiche le détour et ne propose que l'ajout comme étape, à la bonne place (`ajouterAuTrajet`), avec recalcul de l'itinéraire.
 - **Pendant la navigation** (bouton « ⛽ Stations ») : les **5 stations qui font perdre le moins de temps**.
   1. Présélection locale : stations devant le véhicule, à moins de 5 km du trajet restant et dans les 100 km à venir. On garde les 20 plus proches de la route.

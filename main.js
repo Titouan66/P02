@@ -117,6 +117,13 @@ const map = new maplibregl.Map({
 // Contrôles de navigation (zoom, rotation)
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+// Téléphone : la page ne se zoome jamais, seule la carte le fait (boutons et menus restent en place).
+// Safari (iPhone) ignore user-scalable=no pour le pincement : on bloque ses gestes de zoom de page.
+// La carte n'est pas concernée : MapLibre lit directement les touchers (touchstart / touchmove).
+for (const geste of ["gesturestart", "gesturechange", "gestureend"]) {
+  document.addEventListener(geste, (e) => e.preventDefault(), { passive: false });
+}
+
 // ---------------------------------------------------------------
 // Itinéraire : point de départ -> point d'arrivée
 // ---------------------------------------------------------------
@@ -184,10 +191,16 @@ map.on("load", () => {
   });
 });
 
+// Message du GPS : dans le menu détaillé (#resultat) et dans la bulle en haut de l'écran (#gps-message),
+// qui affiche les erreurs, et aussi les messages d'attente pendant le choix d'un lieu (voir style.css)
+const gpsMessage = document.getElementById("gps-message");
 function message(texte, erreur = false) {
-  el.resultat.textContent = texte;
-  el.resultat.classList.toggle("erreur", erreur);
+  for (const zone of [el.resultat, gpsMessage]) {
+    zone.textContent = texte;
+    zone.classList.toggle("erreur", erreur);
+  }
 }
+gpsMessage.addEventListener("click", () => message("")); // toucher la bulle la ferme
 
 function formatCoords([lng, lat]) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
@@ -710,10 +723,14 @@ async function calculerTrajet({ origine, cap = null, ajuster = true } = {}) {
     chargerDetails(routeActive, legs.map((leg, k) => ({ shape: leg.shape, decalage: decalages[k] })));
     majInstruction();
 
+    majApercu();
+
     if (ajuster) {
+      // Tout le trajet visible, entre les boutons du haut et le bandeau du bas (+ le menu détaillé s'il est ouvert)
       const bounds = coords.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(a, a));
+      const grandEcran = map.getContainer().clientWidth > 800;
       map.fitBounds(bounds, {
-        padding: { top: 60, bottom: 60, left: menuOuvert() ? 340 : 60, right: 60 },
+        padding: { top: 70, bottom: 190, left: menuOuvert() && grandEcran ? 340 : 40, right: 50 },
         maxZoom: 16,
       });
       message(`${formatDistance(route.distance)} · ${formatDuree(route.duration)}`);
@@ -724,6 +741,7 @@ async function calculerTrajet({ origine, cap = null, ajuster = true } = {}) {
       routeActive = null;
       map.getSource("trajet").setData({ type: "FeatureCollection", features: [] });
       map.getSource("signaux")?.setData({ type: "FeatureCollection", features: [] });
+      majApercu();
       message(e.message, true);
     }
     return false;
@@ -734,6 +752,7 @@ function effacerTrajet() {
   routeActive = null;
   map.getSource("trajet")?.setData({ type: "FeatureCollection", features: [] });
   map.getSource("signaux")?.setData({ type: "FeatureCollection", features: [] });
+  majApercu();
 }
 
 // Formulaire : géocode les champs puis calcule le trajet
@@ -744,13 +763,13 @@ document.getElementById("panneau").addEventListener("submit", async (e) => {
     await resoudre("depart");
     await resoudreEtapes();
     await resoudre("arrivee");
-    await calculerTrajet();
+    if ((await calculerTrajet()) && !nav) afficherApercu();
   } catch (err) {
     message(err.message, true);
   }
 });
 
-// Bouton « Effacer »
+// Bouton « Effacer » : tout est retiré, on repart du choix du départ
 document.getElementById("effacer").addEventListener("click", () => {
   arreterNavigation();
   retirerPoint("depart");
@@ -759,6 +778,7 @@ document.getElementById("effacer").addEventListener("click", () => {
   effacerTrajet();
   message("");
   activer("depart");
+  ouvrirSelection("depart");
 });
 
 // Bouton « Ma position » : départ = position GPS de l'appareil
@@ -786,20 +806,189 @@ function activer(type) {
   for (const t of ["depart", ...ordreEtapes, "arrivee"]) el[t].classList.toggle("actif", t === type);
 }
 
-// Bouton « GPS » : ouvre / range le menu d'itinéraire.
-// Menu fermé : les points et le trajet restent affichés, mais la carte ne reçoit plus de pointage.
+// ---------------------------------------------------------------
+// Interface du GPS (pensée pour le téléphone : la carte reste visible)
+// ---------------------------------------------------------------
+// Bouton « GPS » :
+// 1. un bandeau en bas de l'écran fait choisir le départ (adresse, position actuelle ou point sur la carte),
+//    puis un bandeau identique fait choisir l'arrivée ;
+// 2. aperçu : la carte montre tout le trajet, le bandeau du bas donne distance, durée et heure d'arrivée,
+//    avec « ▶ Départ » pour lancer la navigation et « › Détail » (à gauche) pour le menu complet
+//    (étapes, options « Éviter », simulation…). Une étape ajoutée se choisit avec le même bandeau.
+// Le menu détaillé (#panneau) garde son fonctionnement : saisie des champs, clic sur la carte, glisser-déposer.
 const panneau = document.getElementById("panneau");
 const boutonGps = document.getElementById("bouton-gps");
 const carte = document.getElementById("map");
+const boutonDetail = document.getElementById("gps-detail");
+const sel = {
+  form: document.getElementById("selection"),
+  pastille: document.getElementById("selection-pastille"),
+  titre: document.getElementById("selection-titre"),
+  annuler: document.getElementById("selection-annuler"),
+  adresse: document.getElementById("selection-adresse"),
+  position: document.getElementById("selection-position"),
+  carte: document.getElementById("selection-carte"),
+};
 
+let etatGps = "ferme"; // "ferme" | "selection" | "apercu" (la navigation a sa propre classe : body.navigation)
+let selection = null;  // pendant le choix d'un lieu : { type, pointage (true = le prochain toucher sur la carte le place) }
+
+// Menu détaillé ouvert (bouton « › Détail »)
 function menuOuvert() {
   return !panneau.hidden;
 }
 
-boutonGps.addEventListener("click", () => {
-  panneau.hidden = menuOuvert();
-  boutonGps.setAttribute("aria-expanded", String(menuOuvert()));
-  carte.classList.toggle("pointage", menuOuvert());
+function gpsOuvert() {
+  return etatGps !== "ferme";
+}
+
+// Affiche les bons éléments selon l'état (classes sur <body> : voir style.css)
+function majAffichage() {
+  const enNavigation = Boolean(nav);
+  document.body.classList.toggle("selection", !enNavigation && etatGps === "selection");
+  document.body.classList.toggle("apercu", !enNavigation && etatGps === "apercu");
+  document.body.classList.toggle("detail", menuOuvert());
+  sel.form.hidden = enNavigation || etatGps !== "selection";
+  bandeau.hidden = !(enNavigation || etatGps === "apercu");
+  boutonGps.setAttribute("aria-expanded", String(gpsOuvert()));
+  boutonDetail.setAttribute("aria-expanded", String(menuOuvert()));
+  sel.carte.setAttribute("aria-pressed", String(Boolean(selection?.pointage)));
+  carte.classList.toggle("pointage", Boolean(selection?.pointage) || menuOuvert());
+}
+
+function ouvrirDetail(ouvrir) {
+  panneau.hidden = !ouvrir;
+  majAffichage();
+}
+
+// Nom affiché dans le bandeau de choix
+function titreLieu(type) {
+  if (type === "depart") return "Point de départ";
+  if (type === "arrivee") return "Point d'arrivée";
+  return `Étape ${ordreEtapes.indexOf(type) + 1}`;
+}
+
+// Une étape ajoutée mais jamais placée n'a pas de raison de rester dans le menu
+function oublierEtapeVide() {
+  const type = selection?.type;
+  if (type?.startsWith("etape") && !points[type]) retirerEtape(type, { recalculer: false });
+}
+
+// Bandeau de choix d'un lieu (départ, arrivée ou étape)
+function ouvrirSelection(type) {
+  if (selection && selection.type !== type) oublierEtapeVide();
+  selection = { type, pointage: false };
+  etatGps = "selection";
+  panneau.hidden = true;
+  sel.titre.textContent = titreLieu(type);
+  sel.pastille.style.background = couleurLieu(type);
+  sel.adresse.value = el[type].value;
+  sel.adresse.placeholder = type === "depart" ? "Adresse de départ" : type === "arrivee" ? "Adresse d'arrivée" : "Adresse de l'étape";
+  message("");
+  majAffichage();
+}
+
+// Aperçu du trajet : bandeau du bas avec « ▶ Départ » et « › Détail »
+function afficherApercu() {
+  oublierEtapeVide();
+  selection = null;
+  etatGps = "apercu";
+  majApercu();
+  majAffichage();
+}
+
+// Chiffres du bandeau pendant l'aperçu (trajet complet, heure d'arrivée si l'on partait maintenant)
+function majApercu() {
+  if (nav) return;
+  if (routeActive) majBandeau(routeActive.total, routeActive.duree);
+  else for (const zone of Object.values(elBandeau)) zone.textContent = "–";
+  document.getElementById("lancer").disabled = !routeActive;
+}
+setInterval(() => etatGps === "apercu" && majApercu(), 30000); // l'heure d'arrivée avance avec l'horloge
+
+// Ouvre le GPS à la bonne étape : départ à choisir, puis arrivée, sinon aperçu du trajet
+function ouvrirGps() {
+  if (!points.depart) return ouvrirSelection("depart");
+  if (!points.arrivee) return ouvrirSelection("arrivee");
+  afficherApercu();
+  if (!routeActive) calculerTrajet();
+}
+
+function fermerGps() {
+  oublierEtapeVide();
+  selection = null;
+  etatGps = "ferme";
+  panneau.hidden = true;
+  message("");
+  majAffichage();
+}
+
+// Un lieu vient d'être choisi : lieu suivant à choisir, ou trajet calculé et montré en entier
+function lieuChoisi() {
+  if (!points.depart) return ouvrirSelection("depart");
+  if (!points.arrivee) return ouvrirSelection("arrivee");
+  afficherApercu();
+  calculerTrajet();
+}
+
+boutonGps.addEventListener("click", () => (gpsOuvert() ? fermerGps() : ouvrirGps()));
+boutonDetail.addEventListener("click", () => ouvrirDetail(!menuOuvert()));
+document.getElementById("lancer").addEventListener("click", demarrer);
+sel.annuler.addEventListener("click", () => {
+  oublierEtapeVide();
+  selection = null;
+  if (points.depart && points.arrivee) afficherApercu();
+  else fermerGps();
+});
+
+// Choix par adresse (touche « Entrée » / « Rechercher » du clavier)
+sel.form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const type = selection?.type;
+  const texte = sel.adresse.value.trim();
+  if (!type) return;
+  if (!texte) return message("Entrez une adresse, ou choisissez un point (⌖ ou 📍)", true);
+  el[type].value = texte;
+  delete el[type].dataset.place; // le champ a changé : on le géocode
+  try {
+    message("Recherche de l'adresse…");
+    await resoudre(type);
+    if (selection?.type !== type) return; // bandeau fermé entre-temps
+    sel.adresse.blur(); // range le clavier du téléphone
+    message("");
+    map.flyTo({ center: points[type].lngLat, zoom: Math.max(map.getZoom(), 13) });
+    lieuChoisi();
+  } catch (err) {
+    message(err.message, true);
+  }
+});
+
+// Choix par la position actuelle de l'appareil (bouton masqué en mode test : voir GPS_REEL)
+sel.position.addEventListener("click", () => {
+  const type = selection?.type;
+  if (!type) return;
+  if (!navigator.geolocation) return message("Géolocalisation non disponible", true);
+  message("Localisation en cours…");
+  navigator.geolocation.getCurrentPosition(
+    ({ coords }) => {
+      if (selection?.type !== type) return;
+      const lngLat = [coords.longitude, coords.latitude];
+      definirPoint(type, lngLat); // le champ affiche ensuite l'adresse trouvée
+      message("");
+      map.flyTo({ center: lngLat, zoom: Math.max(map.getZoom(), 14) });
+      lieuChoisi();
+    },
+    () => message("Position refusée ou indisponible", true),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+// Choix d'un point sur la carte : le prochain toucher sur la carte place le lieu (re-toucher 📍 annule)
+sel.carte.addEventListener("click", () => {
+  if (!selection) return;
+  selection.pointage = !selection.pointage;
+  message(selection.pointage ? "Touchez la carte pour placer le point" : "");
+  majAffichage();
 });
 
 el.depart.addEventListener("focus", () => activer("depart"));
@@ -810,18 +999,25 @@ document.getElementById("pointer-arrivee").addEventListener("click", () => {
 });
 activer("depart");
 
-// Bouton « + » sous l'arrivée : nouvelle ligne d'étape (juste avant l'arrivée)
+// Bouton « + Ajouter une étape » du menu détaillé : nouvelle étape (juste avant l'arrivée),
+// choisie avec le bandeau du bas, comme l'arrivée
 document.getElementById("ajouter-etape").addEventListener("click", () => {
   if (ordreEtapes.length >= MAX_ETAPES) return message(`Maximum ${MAX_ETAPES} étapes`, true);
-  const type = creerEtape();
-  el[type].focus(); // le prochain clic sur la carte place cette étape
+  ouvrirSelection(creerEtape());
 });
 
-// Clic sur la carte : place le point du champ actif,
-// puis passe automatiquement à l'arrivée (ou au départ) s'il est encore vide.
+// Toucher la carte :
+// - pendant le choix d'un lieu avec 📍 : place ce lieu ;
+// - menu détaillé ouvert : place le point du champ actif, puis passe à l'arrivée (ou au départ) s'il est vide.
 map.on("click", (e) => {
+  const lngLat = [e.lngLat.lng, e.lngLat.lat];
+  if (selection?.pointage) {
+    definirPoint(selection.type, lngLat); // coordonnées, puis l'adresse la plus proche
+    message("");
+    return lieuChoisi();
+  }
   if (!menuOuvert()) return;
-  definirPoint(actif, [e.lngLat.lng, e.lngLat.lat]);
+  definirPoint(actif, lngLat);
   const autre = actif === "arrivee" ? "depart" : "arrivee";
   if (!points[autre]) activer(autre);
   calculerTrajet();
@@ -835,7 +1031,11 @@ const ICONE_POSITION = "fleche.svg"; // à remplacer pour personnaliser l'icône
 // est coché : la voiture virtuelle prend alors le relais, sans GPS).
 // Passer à false pour un MODE TEST sans géolocalisation : la « position actuelle » est le point de départ.
 const GPS_REEL = true;
-if (!GPS_REEL) document.getElementById("ma-position").hidden = true;
+if (!GPS_REEL) {
+  // Mode test : pas de géolocalisation, donc pas de bouton « position actuelle »
+  document.getElementById("ma-position").hidden = true;
+  sel.position.hidden = true;
+}
 
 const ZOOM_NAVIGATION = 17;
 
@@ -1376,9 +1576,11 @@ async function lancerNavigation() {
       signalPerdu: false, // vrai entre une erreur du GPS et la position suivante
     };
     message("");
-    if (menuOuvert()) boutonGps.click(); // range le menu
-    bandeau.hidden = false;
+    oublierEtapeVide();
+    selection = null;
+    panneau.hidden = true; // range le menu détaillé
     document.body.classList.add("navigation");
+    majAffichage(); // bandeau en mode navigation (« Arrêter »)
     surPosition(p);
     map.flyTo({
       center: [p.coords.longitude, p.coords.latitude],
@@ -1410,9 +1612,13 @@ function arreterNavigation() {
   nav = null;
   map.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 800 });
   reinitialiserEtapes();
-  bandeau.hidden = true;
   document.getElementById("bandeau-haut").hidden = true;
+  document.getElementById("bandeau-limite").hidden = true;
   document.body.classList.remove("navigation");
+  // Retour à l'aperçu du trajet (« ▶ Départ » pour repartir), ou GPS fermé s'il n'y a plus de trajet
+  etatGps = routeActive ? "apercu" : "ferme";
+  majApercu();
+  majAffichage();
 }
 
 document.getElementById("demarrer").addEventListener("click", demarrer);

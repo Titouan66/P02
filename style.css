@@ -3,6 +3,22 @@ html, body {
   padding: 0;
   height: 100%;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Téléphone : la page reste fixe, seule la carte se zoome et se déplace.
+     pan-x pan-y = défilement des listes permis, mais ni pincement ni double-tap pour zoomer la page.
+     La carte n'est pas gênée : MapLibre gère lui-même ses gestes (touch-action: none sur son canevas). */
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: pan-x pan-y;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Boutons : un double-tap rapide (ex. vitesse ×1 → ×2) ne doit pas zoomer la page */
+button,
+input,
+select,
+label {
+  touch-action: manipulation;
 }
 
 #map {
@@ -50,6 +66,9 @@ html, body {
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  /* Menu détaillé : ne descend pas sur le bandeau du bas, défile s'il est trop long */
+  max-height: calc(100% - 190px);
+  overflow-y: auto;
 }
 
 /* Onglets */
@@ -387,6 +406,19 @@ body.navigation #panneau-carburant { display: none; }
   font-weight: 700;
   color: #0b3d91;
 }
+
+/* Bouton « › Afficher la liste » : la liste des stations est repliée par défaut */
+#carbu-afficher-liste {
+  align-self: flex-start;
+  padding: 6px 10px;
+  border: 1px solid #c8d3e6;
+  border-radius: 8px;
+  background: #f1f5ff;
+  cursor: pointer;
+}
+#carbu-afficher-liste[aria-expanded="true"] { background: #fff; }
+
+#carbu-liste[hidden] { display: none; }
 
 #carbu-liste {
   display: flex;
@@ -730,4 +762,157 @@ body:not(.simulation) #simulation-controle { display: none; }
 }
 @media (max-width: 800px) {
   #simulation-controle { bottom: 118px; height: 44px; border-radius: 12px; }
+}
+
+/* ---------------------------------------------------------------
+   Écrans tactiles : pas de zoom automatique sur les champs
+   --------------------------------------------------------------- */
+/* Safari (iPhone) zoome toute la page dès qu'on touche un champ écrit en moins de 16 px */
+@media (pointer: coarse) {
+  .champ input,
+  #carbu-lieu,
+  #carbu-type,
+  #panneau select,
+  .route-tete select,
+  #selection-adresse {
+    font-size: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------
+   GPS : choix des lieux et aperçu du trajet (bandeaux en bas de l'écran)
+   --------------------------------------------------------------- */
+/* Bandeau de choix d'un lieu : adresse, position actuelle, point sur la carte */
+#selection {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 40px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 10px 12px 12px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#selection[hidden] { display: none; }
+
+.selection-tete {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+}
+.selection-tete strong { flex: 1; color: #111; }
+
+.selection-ligne { display: flex; gap: 6px; }
+
+#selection-adresse {
+  flex: 1;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #c8c8c8;
+  border-radius: 8px;
+  font-size: 15px;
+}
+#selection-adresse:focus { outline: none; border-color: #1d4ed8; }
+
+#selection-position,
+#selection-carte {
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border: 1px solid #c8c8c8;
+  border-radius: 10px;
+  background: #f5f5f5;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+/* 📍 enfoncé : le prochain toucher sur la carte place le lieu */
+#selection-carte[aria-pressed="true"] {
+  border-color: #1d4ed8;
+  background: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.3);
+}
+
+#selection-annuler {
+  flex: none;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+  color: #666;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Bulle de message du GPS, sous les boutons du haut : erreurs, et messages d'attente pendant un choix */
+#gps-message {
+  position: absolute;
+  top: 60px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  cursor: pointer;
+}
+#gps-message.erreur { color: #b91c1c; font-weight: 600; }
+#gps-message:empty,
+body:not(.selection) #gps-message:not(.erreur),
+body.navigation #gps-message,
+body.detail #gps-message { display: none; }
+
+/* Bandeau du bas : « ▶ Départ » pendant l'aperçu, « Arrêter » pendant la navigation */
+#lancer {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+#lancer:disabled { opacity: 0.5; cursor: default; }
+body.navigation #lancer,
+body:not(.navigation) #arreter { display: none; }
+
+/* « › Détail » : à gauche du bandeau pendant l'aperçu (même place que « ⛽ Stations » en navigation) */
+#gps-detail {
+  position: absolute;
+  left: 12px;
+  bottom: 40px;
+  z-index: 2;
+  height: 66px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 14px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+#gps-detail[aria-expanded="true"] { background: #1d4ed8; color: #fff; }
+body:not(.apercu) #gps-detail { display: none; }
+
+@media (max-width: 800px) {
+  /* Petits écrans : le bandeau prend toute la largeur, « › Détail » passe au-dessus */
+  #gps-detail { bottom: 118px; height: 44px; border-radius: 12px; }
+  #panneau { max-height: calc(100% - 250px); }
 }
