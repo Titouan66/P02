@@ -831,10 +831,10 @@ map.on("click", (e) => {
 // Navigation : bouton « Démarrer »
 // ---------------------------------------------------------------
 const ICONE_POSITION = "fleche.svg"; // à remplacer pour personnaliser l'icône (orientée vers le haut)
-// MODE TEST : tant que GPS_REEL vaut false, la géolocalisation du navigateur n'est PAS utilisée.
-// La « position actuelle » est alors le point de départ du menu GPS.
-// Passer à true pour utiliser le vrai GPS de l'appareil.
-const GPS_REEL = false;
+// GPS_REEL = true : la navigation suit le vrai GPS de l'appareil (sauf si « Simuler le déplacement »
+// est coché : la voiture virtuelle prend alors le relais, sans GPS).
+// Passer à false pour un MODE TEST sans géolocalisation : la « position actuelle » est le point de départ.
+const GPS_REEL = true;
 if (!GPS_REEL) document.getElementById("ma-position").hidden = true;
 
 const ZOOM_NAVIGATION = 17;

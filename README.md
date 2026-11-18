@@ -67,12 +67,13 @@ Aucune clé n'est nécessaire. Ces services publics ont des quotas : à ménager
 
 ### Point d'attention : `GPS_REEL`
 
-Dans `main.js`, la constante `GPS_REEL` vaut **`false`** (« MODE TEST »). Tant qu'elle est fausse :
+Dans `main.js`, la constante `GPS_REEL` vaut **`true`** : la navigation suit le **vrai GPS** de l'appareil (`watchPosition`). Si le champ Départ est vide, le départ est la position GPS. Le bouton « ⌖ Utiliser ma position » du menu GPS est disponible.
 
-- la géolocalisation du navigateur n'est **pas** utilisée pendant la navigation, et la « position actuelle » est le point de départ saisi ;
-- le bouton « ⌖ Utiliser ma position » du menu GPS est masqué.
+Le **mode simulation** reste utilisable : si « Simuler le déplacement » est coché au démarrage, la voiture virtuelle remplace le GPS et part du point de départ saisi.
 
-Pour utiliser le **vrai GPS** de l'appareil, par exemple sur téléphone, passer `GPS_REEL` à `true`. Le code de géolocalisation (`watchPosition`, gestion des refus et des erreurs) est déjà écrit.
+Pour revenir à un **MODE TEST** sans géolocalisation, passer `GPS_REEL` à `false`. La « position actuelle » est alors le point de départ saisi, et le bouton « ⌖ Utiliser ma position » est masqué.
+
+La géolocalisation exige une page en HTTPS (GitHub Pages) ou servie depuis `localhost`. Sur téléphone, il faut donc tester la version publiée.
 
 ## Fonctionnalités : stations-service (`carburant.js`)
 
