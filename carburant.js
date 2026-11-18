@@ -82,7 +82,7 @@
   const decalage = () => [panneauOuvert() || menuOuvert() ? 160 : 0, 0];
 
   // --- Chargement et normalisation des stations ---
-  function normaliser(brut) {
+  function harmoniser(brut) {
     if (!brut.geom || !Number.isFinite(brut.geom.lat) || !Number.isFinite(brut.geom.lon)) return null;
     const prices = {};
     const maj = {};
@@ -110,7 +110,7 @@
     const reponse = await fetch(URL_STATIONS);
     if (!reponse.ok) throw new Error("HTTP " + reponse.status);
     const brutes = await reponse.json();
-    return brutes.map(normaliser).filter(Boolean);
+    return brutes.map(harmoniser).filter(Boolean);
   }
 
   // --- Marqueurs de prix sur la carte ---

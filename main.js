@@ -623,9 +623,10 @@ function decoderPolyline6(texte) {
 }
 
 // origine : point de départ du calcul (par défaut le marqueur de départ)
+// cap : sens de marche au départ (degrés), pour un recalcul en roulant ; null = indifférent
 // ajuster : recadrer la carte et afficher le résumé dans le menu
 // Passe par les étapes dans l'ordre (sauf celles déjà dépassées). Renvoie true si le trajet est à jour.
-async function calculerTrajet({ origine, ajuster = true } = {}) {
+async function calculerTrajet({ origine, cap = null, ajuster = true } = {}) {
   if (!points.arrivee || (!origine && !points.depart)) return false;
   if (ajuster) message("Calcul en cours…");
   const [a, b] = [origine ?? points.depart.lngLat, points.arrivee.lngLat];
@@ -643,6 +644,7 @@ async function calculerTrajet({ origine, ajuster = true } = {}) {
     costing_options: { auto: optionsAuto },
     directions_options: { units: "kilometers", language: "fr-FR" },
   };
+  if (cap != null) Object.assign(corps.locations[0], { heading: Math.round(cap), heading_tolerance: TOLERANCE_CAP });
 
   try {
     const reponse = await fetch("https://valhalla1.openstreetmap.de/route", {
@@ -653,6 +655,8 @@ async function calculerTrajet({ origine, ajuster = true } = {}) {
     const donnees = await reponse.json().catch(() => ({}));
     if (requete !== derniereRequete) return false;
     if (!reponse.ok || !donnees.trip) {
+      // Aucune route dans notre sens de marche (impasse, cap imprécis…) : on réessaie sans le cap
+      if (cap != null) return calculerTrajet({ origine, ajuster });
       throw new Error(
         reponse.status === 400
           ? "Aucun itinéraire trouvé avec ces options"
@@ -847,8 +851,19 @@ const ECART_ROUTE_EXTRAPOLATION_M = 30; // au-delà de cet écart on n'est plus 
 const ANTICIPATION_CAP_M = 8;      // le cap de la flèche est celui de la route 8 m devant la voiture
 const PAUSE_CAMERA_MS = 5000;      // inactivité (sans toucher la carte) au bout de laquelle la caméra revient en mode suivi
 const DUREE_RETOUR_MS = 900;       // durée du retour progressif vers la vue de suivi
-const SEUIL_HORS_ROUTE_M = 80; // au-delà, le trajet est recalculé depuis la position actuelle
 const SEUIL_ARRIVEE_M = 25;    // en dessous, on considère être arrivé
+
+// Détection d'une erreur de route (mauvaise rue, mauvaise sortie, demi-tour, contresens)
+const SEUIL_HORS_ROUTE_M = 80;      // au-delà, on est hors trajet : recalcul immédiat
+const ECART_SUSPECT_M = 35;         // au-delà, hors trajet si cela se confirme (voir CONFIRMATIONS_HORS_ROUTE)
+const ELOIGNEMENT_MIN_M = 2;        // l'écart doit grandir d'au moins 2 m d'une position à l'autre (voir horsTrajet)
+const ECART_DIVERGENCE_M = 15;      // à partir de cet écart, un cap qui diverge signale une mauvaise route…
+const ANGLE_DIVERGENCE = 40;        // …s'il s'écarte de celui de la route d'au moins 40°
+const ANGLE_CONTRESENS = 120;       // cap opposé à celui de la route : demi-tour ou trajet pris à l'envers
+const VITESSE_MIN_CAP_MS = 2;       // en dessous (~7 km/h), le cap n'est pas fiable : on ne s'en sert pas
+const CONFIRMATIONS_HORS_ROUTE = 2; // positions suspectes de suite avant de recalculer (filtre les sauts du GPS)
+const DELAI_ENTRE_RECALCULS_MS = 5000; // ménage le serveur public si l'on reste hors trajet
+const TOLERANCE_CAP = 45;           // le nouvel itinéraire part dans notre sens de marche, à ± 45°
 
 const bandeau = document.getElementById("bandeau");
 const elBandeau = {
@@ -921,10 +936,17 @@ function progression(pos, global = false) {
 function majBandeau(restantM, restantS) {
   elBandeau.distance.textContent = formatDistance(restantM);
   elBandeau.temps.textContent = formatDuree(Math.max(60, restantS));
-  elBandeau.arrivee.textContent = new Date(Date.now() + restantS * 1000).toLocaleTimeString(
-    "fr-FR",
-    { hour: "2-digit", minute: "2-digit" }
-  );
+  // Tant que le GPS ne répond plus, l'heure d'arrivée laisse la place au message d'alerte
+  elBandeau.arrivee.textContent = nav?.signalPerdu
+    ? "Signal perdu"
+    : new Date(Date.now() + restantS * 1000).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+}
+
+// Erreur du GPS (pas de signal, délai dépassé…) : on prévient dans le bandeau
+function surErreurGps() {
+  if (!nav) return;
+  nav.signalPerdu = true;
+  elBandeau.arrivee.textContent = "Signal perdu";
 }
 
 function creerIcone() {
@@ -959,6 +981,11 @@ function surPosition({ coords: c, synthetique = false }) {
       nav.refVitesse = { pos, t: maintenant };
     }
     nav.fix = { t: maintenant }; // instant de la dernière position réelle : base de l'extrapolation
+    // Une vraie position est arrivée : le signal est retrouvé (majBandeau remet l'heure d'arrivée)
+    if (nav.signalPerdu) {
+      nav.signalPerdu = false;
+      elBandeau.arrivee.textContent = "–";
+    }
   }
   const aBouge = !nav.derniere || distanceM(nav.derniere, pos) > 3;
 
@@ -992,14 +1019,53 @@ function surPosition({ coords: c, synthetique = false }) {
     return;
   }
 
-  // Hors trajet : on recalcule depuis la position actuelle (au plus toutes les 15 s)
-  if (ecart > SEUIL_HORS_ROUTE_M && !nav.recalcul && Date.now() - nav.dernierRecalcul > 15000) {
-    nav.recalcul = true;
-    nav.dernierRecalcul = Date.now();
-    calculerTrajet({ origine: pos, ajuster: false }).finally(() => {
+  // Hors trajet : on recalcule depuis la position actuelle (seules les vraies positions comptent)
+  if (synthetique) return;
+  if (horsTrajet(ecart, parcouru) && !nav.recalcul && Date.now() - nav.dernierRecalcul > DELAI_ENTRE_RECALCULS_MS) {
+    recalculerDepuis(pos);
+  }
+}
+
+// Le véhicule a-t-il quitté le trajet ? Appelée à chaque vraie position.
+// - très loin du trajet (> SEUIL_HORS_ROUTE_M) : oui, tout de suite ;
+// - un peu à l'écart (> ECART_SUSPECT_M), ou cap qui s'écarte de la route (mauvaise rue, mauvaise sortie),
+//   ou cap opposé à la route (demi-tour, trajet pris à l'envers, que l'écart seul ne voit jamais) :
+//   oui si c'est le cas sur CONFIRMATIONS_HORS_ROUTE positions de suite.
+// Pour l'écart, il faut aussi s'ÉLOIGNER du trajet : une vraie erreur de route éloigne de plus en plus,
+// alors qu'un GPS imprécis (immeubles, tunnel…) donne un écart qui reste stable ou qui zigzague.
+function horsTrajet(ecart, parcouru) {
+  if (ecart > SEUIL_HORS_ROUTE_M) return true;
+  const sEloigne = ecart > (nav.ecartPrecedent ?? Infinity) + ELOIGNEMENT_MIN_M;
+  nav.ecartPrecedent = ecart;
+  let suspect = sEloigne && ecart > ECART_SUSPECT_M;
+  if (!suspect && (nav.vitesse ?? 0) >= VITESSE_MIN_CAP_MS) {
+    // Sens de la route à notre hauteur (sur ~15 m, pour lisser les petits zigzags du tracé)
+    const capRoute = capEntre(pointSurTrajet(routeActive, parcouru - 5), pointSurTrajet(routeActive, parcouru + 10));
+    const ecartCap = Math.abs(normaliser(nav.cap - capRoute));
+    suspect = ecartCap > ANGLE_CONTRESENS || (sEloigne && ecart > ECART_DIVERGENCE_M && ecartCap > ANGLE_DIVERGENCE);
+  }
+  nav.suspect = suspect ? (nav.suspect ?? 0) + 1 : 0;
+  return nav.suspect >= CONFIRMATIONS_HORS_ROUTE;
+}
+
+// Nouvel itinéraire depuis `pos`. En roulant, il part dans notre sens de marche : Valhalla propose
+// alors de continuer puis de faire demi-tour plus loin, plutôt qu'un demi-tour sur place.
+function recalculerDepuis(pos) {
+  nav.recalcul = true;
+  nav.dernierRecalcul = Date.now();
+  nav.suspect = 0;
+  nav.ecartPrecedent = null; // l'écart repart de zéro sur le nouveau trajet
+  const cap = (nav.vitesse ?? 0) >= VITESSE_MIN_CAP_MS ? nav.cap : null;
+  calculerTrajet({ origine: pos, cap, ajuster: false })
+    .then((ok) => {
+      // Bandeau et instructions passent tout de suite au nouveau trajet, sans attendre la position suivante
+      if (ok && nav) {
+        surPosition({ coords: { longitude: nav.cible[0], latitude: nav.cible[1], heading: null }, synthetique: true });
+      }
+    })
+    .finally(() => {
       if (nav) nav.recalcul = false;
     });
-  }
 }
 
 function positionActuelle() {
@@ -1307,6 +1373,7 @@ async function lancerNavigation() {
       dernierRecalcul: 0,
       recalcul: false,
       watchId: null,
+      signalPerdu: false, // vrai entre une erreur du GPS et la position suivante
     };
     message("");
     if (menuOuvert()) boutonGps.click(); // range le menu
@@ -1323,11 +1390,10 @@ async function lancerNavigation() {
     });
     nav.camera.rafId = requestAnimationFrame(boucleCamera);
     if (reel) {
-      nav.watchId = navigator.geolocation.watchPosition(
-        surPosition,
-        () => (elBandeau.arrivee.textContent = "Signal perdu"),
-        { enableHighAccuracy: true, maximumAge: 1000 }
-      );
+      nav.watchId = navigator.geolocation.watchPosition(surPosition, surErreurGps, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+      });
     }
     if (simule) demarrerSimulation();
   } catch (e) {

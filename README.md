@@ -54,7 +54,11 @@ Aucune clé n'est nécessaire. Ces services publics ont des quotas : à ménager
   - Caméra inclinée à 60° derrière le véhicule, orientée dans le sens de marche. Le zoom est de 17 et le véhicule est placé dans le bas de l'écran (constantes `ZOOM_NAVIGATION`, `INCLINAISON_NAVIGATION`, `DECALAGE_VEHICULE`).
   - Mouvement fluide : lissage de la position et du cap, extrapolation à l'estime pendant 3 s maximum sans nouveau point GPS, délai de réaction de la caméra aux changements de cap. La caméra boucle sur `requestAnimationFrame` (`boucleCamera`).
   - Toucher la carte met la caméra en pause, puis elle revient au suivi après 5 s d'inactivité.
-  - **Recalcul automatique** si l'on s'écarte de plus de 80 m du trajet (au plus toutes les 15 s). Arrivée détectée à moins de 25 m.
+  - **Recalcul automatique en cas d'erreur de route** (`horsTrajet`, constantes en tête de la section navigation), au plus toutes les 5 s :
+    - immédiatement à plus de 80 m du trajet ;
+    - sur 2 positions de suite : à plus de 35 m en s'éloignant, ou à plus de 15 m en s'éloignant avec un cap à plus de 40° de celui de la route (mauvaise rue, mauvaise sortie), ou avec un cap opposé à la route (demi-tour, trajet pris à l'envers). Les critères de cap ne s'appliquent qu'au-dessus de ~7 km/h.
+    - Le nouvel itinéraire part dans le sens de marche (cap transmis à Valhalla, à ± 45°), plutôt que par un demi-tour sur place. Sans route possible dans ce sens, on réessaie sans le cap.
+  - Arrivée détectée à moins de 25 m.
   - **Bandeau bas** : distance restante, durée, heure d'arrivée, limitation de vitesse en cours, bouton « Arrêter ».
   - **Bandeau haut** : distance avant la prochaine manœuvre, instruction, et **schéma SVG** de la manœuvre ou de l'intersection (`schemaManoeuvre`, `svgIntersection`). Les manœuvres non directionnelles sont ignorées (`MANOEUVRES_IGNOREES`).
   - **Limitations de vitesse, feux et stops** affichés le long du trajet (Valhalla pour les limitations et les feux, Overpass pour les stops).
@@ -74,7 +78,7 @@ Pour utiliser le **vrai GPS** de l'appareil, par exemple sur téléphone, passer
 
 Ce module est issu d'un projet précédent (« P01 ») et a été intégré à la carte de P02.
 
-- **Chargement** : au démarrage, toutes les stations de France (~10 000, ~1 Mo compressé) sont téléchargées en une fois puis filtrées localement. Les prix sont rechargés toutes les 10 minutes. Les stations sont **normalisées** par `normaliser()` : id, coordonnées, adresse, prix et date de mise à jour par carburant.
+- **Chargement** : au démarrage, toutes les stations de France (~10 000, ~1 Mo compressé) sont téléchargées en une fois puis filtrées localement. Les prix sont rechargés toutes les 10 minutes. Les stations sont **harmonisées** par `harmoniser()` : id, coordonnées, adresse, prix et date de mise à jour par carburant.
 - **Carburants** : SP95, SP98, Gazole, E10, E85, GPL (le champ de l'API est `gplc_*`, voir `CHAMPS_API`).
 - **Affichage** : marqueurs HTML avec le prix (posés sur la carte sans toucher au style). On n'affiche que les **50 stations les plus proches du centre de la carte** parmi celles visibles, et **aucune sous le zoom 11**.
 - **Filtre de prix** : curseur « Prix max » dont les bornes sont les percentiles 1 % et 99 % sur toute la France, pour écarter les prix aberrants.
