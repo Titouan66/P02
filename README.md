@@ -30,6 +30,7 @@ python3 serveur.py 8000   # puis ouvrir http://localhost:8000
 | `index.html` | Tout le HTML : carte, menus (GPS, carburant), bandeaux de navigation, commandes de simulation. Charge MapLibre GL JS 4.7.1 depuis unpkg, puis `main.js`, puis `carburant.js` (**cet ordre compte**). |
 | `main.js` (~1 700 lignes) | Carte, itinéraire, navigation, simulation, limitations/stops/feux, instructions de manœuvre. |
 | `carburant.js` (~770 lignes) | Stations-service. S'exécute dans une IIFE **après** `main.js` et réutilise ses globales (`map`, `definirPoint`, `calculerTrajet`, `points`, etc.). |
+| `lieux.js` | Points d'intérêt : commerces, restaurants, santé, services, hébergement, parkings. Même principe que `carburant.js` : une IIFE chargée en dernier, qui réutilise les globales de `main.js`. |
 | `style.css` | Styles de l'interface (menus, bandeaux, interrupteurs, marqueurs de prix). |
 | `fleche.svg` | Icône du véhicule pendant la navigation (orientée vers le haut). |
 | `serveur.py` | Serveur de développement local. |
@@ -42,8 +43,9 @@ Pas de bibliothèque hormis MapLibre. JavaScript natif, pas de modules : tout pa
 |---|---|
 | OpenFreeMap (`tiles.openfreemap.org`) | Tuiles vectorielles de la carte (schéma OpenMapTiles) et polices des noms de villes (`/fonts`). Le style est défini dans `main.js` (palette `COULEURS`). |
 | Valhalla, serveur public OSM (`valhalla1.openstreetmap.de`) | `/route` : itinéraire et manœuvres (avec péages/autoroutes à éviter). `/trace_attributes` : limitations de vitesse et feux. `/sources_to_targets` : matrice de temps pour mesurer les détours vers les stations. |
-| Overpass (`overpass-api.de` + 2 miroirs) | Panneaux stop près du trajet. Serveurs souvent saturés : en cas d'échec, les stops ne s'affichent pas, sans bloquer le reste. |
-| Nominatim (OSM) | Géocodage d'une adresse saisie pour l'itinéraire. |
+| Overpass (`overpass-api.de` + 2 miroirs) | Panneaux stop près du trajet, et détails d'un lieu touché (adresse, horaires, téléphone, site). Serveurs souvent saturés ou lents (jusqu'à ~25 s) : en cas d'échec, l'information manque, sans bloquer le reste. |
+| Nominatim (OSM) | Géocodage d'une adresse saisie pour l'itinéraire. Détails d'un lieu touché (`lookup` : horaires, téléphone, site). Limite : 1 requête par seconde. |
+| Photon (`photon.komoot.io`) | Recherche de lieux et d'adresses du bandeau du bas, classée par proximité. |
 | Base Adresse Nationale (`data.geopf.fr/geocodage`) | Géocodage inverse (adresse d'un point cliqué) et recherche de ville, code postal ou adresse pour les stations. |
 | data.economie.gouv.fr | Jeu de données « prix des carburants en France, flux instantané v2 ». |
 
@@ -87,6 +89,35 @@ Le **mode simulation** reste utilisable : si « Simuler le déplacement » est c
 Pour revenir à un **MODE TEST** sans géolocalisation, passer `GPS_REEL` à `false`. La « position actuelle » est alors le point de départ saisi, et le bouton « ⌖ Utiliser ma position » est masqué.
 
 La géolocalisation exige une page en HTTPS (GitHub Pages) ou servie depuis `localhost`. Sur téléphone, il faut donc tester la version publiée.
+
+## Fonctionnalités : lieux (`lieux.js`)
+
+- **Affichage** : dès le zoom 15 (`ZOOM_LIEUX`), on affiche les lieux de la couche `poi` des tuiles OpenFreeMap (nom, type, position). Chacun a une pastille colorée selon sa catégorie (`CATEGORIES`) :
+  - alimentation 🛒 en vert ;
+  - restauration 🍴 en orange ;
+  - commerces 🛍 en rose ;
+  - santé ✚ en rouge ;
+  - services ℹ en violet ;
+  - hébergement 🛏 en bleu-vert ;
+  - parkings P en gris.
+
+  Les noms s'affichent dès le zoom 16. Quand deux lieux se chevauchent, le plus important (`rank`) passe en priorité. La table `SOUS_CLASSES` choisit les types affichés et leur nom en français.
+- **Toucher un lieu** ouvre une bulle :
+  - tout de suite : le nom et le type ;
+  - en moins d'une seconde : l'adresse la plus proche, donnée par la Base Adresse Nationale ;
+  - en 1 à 2 secondes, les données OpenStreetMap : l'adresse exacte (si elle est renseignée), les horaires traduits en français, le téléphone (lien d'appel) et le site web.
+- **Comment on retrouve le lieu dans OpenStreetMap** : l'identifiant d'un lieu dans les tuiles vaut numéro OSM × 10 + type (1 = nœud, 2 = chemin, 3 = relation).
+  - On interroge d'abord **Nominatim** (`lookup` avec `extratags`), qui répond en environ 1 s.
+  - En secours, **Overpass** : les 3 serveurs en même temps, la première réponse l'emporte, abandon après 30 s. Ces serveurs sont souvent saturés.
+  - Les réponses sont gardées en cache.
+- **Bandeau de recherche** (en bas, quand le GPS est fermé) : on tape un texte puis on valide avec Entrée.
+  - D'abord les lieux déjà chargés sur la carte, trouvés par leur nom (« Lidl ») ou leur type (« boulangerie »), du plus proche au plus loin.
+  - Puis **Photon** (recherche OpenStreetMap de komoot), classé par proximité avec le centre de la carte. Il trouve aussi les adresses, les rues et les villes.
+  - Si le texte est un type, la liste donne jusqu'à 8 lieux proches ; sinon, 4 au plus, et Photon complète.
+  - Toucher un résultat centre la carte dessus et ouvre sa bulle. Toucher la carte range la liste.
+- **Menu « ☰ »** (à droite du bandeau) : une ligne par type de lieu, avec un interrupteur pour l'afficher ou le masquer sur la carte. Le choix est retenu sur l'appareil (`localStorage`, clé `p02-types-lieux`) ; tous les types sont affichés par défaut.
+- **Boutons** : « 🧭 Y aller » fait du lieu la destination. « ➕ Ajouter au trajet » l'ajoute comme étape, à la bonne place, quand un trajet existe.
+- Pendant le choix d'un point sur la carte (📍), ou quand le menu détaillé du GPS est ouvert, toucher un lieu place le point au lieu d'ouvrir la bulle.
 
 ## Fonctionnalités : stations-service (`carburant.js`)
 

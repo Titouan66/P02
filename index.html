@@ -113,6 +113,20 @@
     </div>
   </form>
 
+  <!-- Recherche de lieux (bandeau du bas quand le GPS est fermé), à droite : types de lieux affichés -->
+  <form id="recherche" autocomplete="off" role="search">
+    <input id="recherche-texte" type="search" placeholder="Rechercher un lieu, une adresse" enterkeyhint="search" aria-label="Rechercher un lieu ou une adresse" />
+    <button type="button" id="recherche-types" aria-expanded="false" aria-controls="types-lieux" title="Types de lieux affichés" aria-label="Types de lieux affichés">☰</button>
+  </form>
+  <div id="recherche-resultats" hidden>
+    <p id="recherche-statut" role="status"></p>
+    <ul id="recherche-liste"></ul>
+  </div>
+  <div id="types-lieux" hidden>
+    <strong>Lieux affichés sur la carte</strong>
+    <div id="types-lieux-liste"></div><!-- une ligne par type, remplie par lieux.js -->
+  </div>
+
   <!-- Messages du GPS (recherche en cours, erreurs) quand le menu détaillé est fermé -->
   <p id="gps-message" role="status"></p>
 
@@ -168,5 +182,6 @@
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="main.js"></script>
   <script src="carburant.js"></script>
+  <script src="lieux.js"></script>
 </body>
 </html>

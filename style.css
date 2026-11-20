@@ -916,3 +916,137 @@ body:not(.apercu) #gps-detail { display: none; }
   #gps-detail { bottom: 118px; height: 44px; border-radius: 12px; }
   #panneau { max-height: calc(100% - 250px); }
 }
+
+/* ---------------------------------------------------------------
+   Lieux (commerces, restaurants, santé…) : bulle d'information
+   --------------------------------------------------------------- */
+.popup-lieu h3 { margin: 0 0 2px; padding-right: 14px; font-size: 15px; color: #111; }
+.popup-lieu .type { margin-bottom: 6px; font-size: 12px; font-weight: 700; }
+.popup-lieu .adresse { margin-bottom: 6px; font-size: 12px; color: #4b5563; }
+.popup-lieu .horaires { margin-bottom: 6px; font-size: 12px; color: #111; white-space: pre-line; }
+.popup-lieu .contact { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; font-size: 12px; }
+.popup-lieu .contact[hidden],
+.popup-lieu .horaires[hidden] { display: none; }
+.popup-lieu .contact a { color: #1d4ed8; overflow-wrap: anywhere; }
+.popup-lieu .osm { font-size: 11px; font-style: italic; color: #6b7280; }
+.popup-lieu .osm:empty { display: none; }
+.popup-lieu .aller,
+.popup-lieu .ajouter {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.popup-lieu .aller { background: #16a34a; }
+.popup-lieu .ajouter { background: #15803d; }
+
+/* ---------------------------------------------------------------
+   Recherche de lieux (bandeau du bas quand le GPS est fermé) et types de lieux affichés
+   --------------------------------------------------------------- */
+#recherche {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 40px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  max-width: 520px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: 8px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#recherche-texte {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #c8c8c8;
+  border-radius: 10px;
+  font-size: 15px;
+}
+#recherche-texte:focus { outline: none; border-color: #1d4ed8; }
+#recherche-types {
+  flex: none;
+  width: 46px;
+  border: 1px solid #c8c8c8;
+  border-radius: 10px;
+  background: #f5f5f5;
+  font-size: 20px;
+  cursor: pointer;
+}
+#recherche-types[aria-expanded="true"] { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
+
+/* Résultats (au-dessus du bandeau) et menu des types (au-dessus, à droite) */
+#recherche-resultats,
+#types-lieux {
+  position: absolute;
+  bottom: 112px;
+  z-index: 2;
+  box-sizing: border-box;
+  max-height: calc(100% - 190px);
+  overflow-y: auto;
+  padding: 8px 12px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+#recherche-resultats { left: 12px; right: 12px; max-width: 520px; margin: 0 auto; }
+#types-lieux { right: 12px; width: 250px; max-width: calc(100vw - 24px); }
+#recherche-resultats[hidden],
+#types-lieux[hidden] { display: none; }
+
+#recherche-statut { margin: 4px 0; font-size: 13px; color: #666; }
+#recherche-statut:empty { display: none; }
+#recherche-liste { margin: 0; padding: 0; list-style: none; }
+#recherche-liste li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 2px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+#recherche-liste li:last-child { border-bottom: none; }
+#recherche-liste .infos { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#recherche-liste strong,
+#recherche-liste .detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#recherche-liste strong { font-size: 14px; color: #111; }
+#recherche-liste .detail { font-size: 12px; color: #6b7280; }
+#recherche-liste .distance { flex: none; font-size: 12px; font-weight: 600; color: #6b7280; }
+
+#types-lieux strong { display: block; margin: 4px 0; font-size: 14px; color: #111; }
+.type-lieu { display: flex; align-items: center; gap: 8px; }
+
+/* Pastille d'une catégorie (liste de résultats, menu des types) */
+.pastille-lieu {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Le bas de l'écran est pris par le GPS (choix d'un lieu, aperçu) ou la navigation */
+body.selection #recherche, body.selection #recherche-resultats, body.selection #types-lieux,
+body.apercu #recherche, body.apercu #recherche-resultats, body.apercu #types-lieux,
+body.navigation #recherche, body.navigation #recherche-resultats, body.navigation #types-lieux { display: none; }
+
+@media (pointer: coarse) {
+  #recherche-texte { font-size: 16px; } /* évite le zoom automatique de l'iPhone */
+}
