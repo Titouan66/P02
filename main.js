@@ -7,14 +7,22 @@ const COULEURS = {
   herbe: "#a8d5a2",
   foret: "#3f7d4e",
   batiment: "#a6a6a6",
+  urbain: "#c3c3bd",   // zones urbaines, carte dézoomée (avant l'apparition des bâtiments)
+  nomVille: "#333333",
   petiteRoute: "#ffffff",
   autoroute: "#4a4a4a",
   eau: "#cfe3f1",
 };
 
 // Style vectoriel minimal (schéma OpenMapTiles, tuiles OpenFreeMap)
+// Carte dézoomée : en dessous de ce zoom les bâtiments ne s'affichent pas ;
+// on montre à la place les zones urbaines (gris plus foncé) et le nom des villes.
+const ZOOM_BATIMENTS = 13;
+
 const style = {
   version: 8,
+  // Polices des noms de villes (servies par OpenFreeMap, comme les tuiles)
+  glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
   sources: {
     openmaptiles: {
       type: "vector",
@@ -25,6 +33,24 @@ const style = {
   },
   layers: [
     { id: "fond", type: "background", paint: { "background-color": COULEURS.fond } },
+
+    // Zones urbaines (carte dézoomée) : sous l'eau, l'herbe et la forêt ; s'efface quand les bâtiments arrivent
+    {
+      id: "urbain",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "landuse",
+      maxzoom: ZOOM_BATIMENTS,
+      filter: [
+        "in",
+        ["get", "class"],
+        ["literal", ["residential", "suburb", "quarter", "neighbourhood", "commercial", "industrial", "retail"]],
+      ],
+      paint: {
+        "fill-color": COULEURS.urbain,
+        "fill-opacity": ["interpolate", ["linear"], ["zoom"], ZOOM_BATIMENTS - 0.5, 1, ZOOM_BATIMENTS, 0],
+      },
+    },
 
     // Eau (pour garder la Seine lisible ; supprimer cette couche pour la retirer)
     {
@@ -69,7 +95,7 @@ const style = {
       type: "fill",
       source: "openmaptiles",
       "source-layer": "building",
-      minzoom: 13,
+      minzoom: ZOOM_BATIMENTS,
       paint: { "fill-color": COULEURS.batiment },
     },
 
@@ -102,6 +128,30 @@ const style = {
       paint: {
         "line-color": COULEURS.autoroute,
         "line-width": ["interpolate", ["exponential", 1.5], ["zoom"], 6, 0.8, 14, 3.5, 18, 16],
+      },
+    },
+
+    // Noms des villes (carte dézoomée), en français si possible. Les grandes villes passent en priorité
+    // quand les noms se chevauchent ; les villages n'apparaissent qu'en se rapprochant (place libre).
+    {
+      id: "noms-villes",
+      type: "symbol",
+      source: "openmaptiles",
+      "source-layer": "place",
+      maxzoom: ZOOM_BATIMENTS,
+      filter: ["in", ["get", "class"], ["literal", ["city", "town", "village"]]],
+      layout: {
+        "text-field": ["coalesce", ["get", "name:fr"], ["get", "name"]],
+        "text-font": ["Noto Sans Bold"],
+        "text-size": ["match", ["get", "class"], "city", 16, "town", 13, 11],
+        "symbol-sort-key": ["match", ["get", "class"], "city", 0, "town", 1, 2],
+        "text-max-width": 8,
+      },
+      paint: {
+        "text-color": COULEURS.nomVille,
+        "text-halo-color": "#ffffff",
+        "text-halo-width": 1.5,
+        "text-opacity": ["interpolate", ["linear"], ["zoom"], ZOOM_BATIMENTS - 0.5, 1, ZOOM_BATIMENTS, 0],
       },
     },
   ],
@@ -769,7 +819,7 @@ document.getElementById("panneau").addEventListener("submit", async (e) => {
   }
 });
 
-// Bouton « Effacer » : tout est retiré, on repart du choix du départ
+// Bouton « Effacer » : tout est retiré, on repart du choix de la destination
 document.getElementById("effacer").addEventListener("click", () => {
   arreterNavigation();
   retirerPoint("depart");
@@ -778,7 +828,7 @@ document.getElementById("effacer").addEventListener("click", () => {
   effacerTrajet();
   message("");
   activer("depart");
-  ouvrirSelection("depart");
+  ouvrirSelection(lieuAChoisir());
 });
 
 // Bouton « Ma position » : départ = position GPS de l'appareil
@@ -810,8 +860,8 @@ function activer(type) {
 // Interface du GPS (pensée pour le téléphone : la carte reste visible)
 // ---------------------------------------------------------------
 // Bouton « GPS » :
-// 1. un bandeau en bas de l'écran fait choisir le départ (adresse, position actuelle ou point sur la carte),
-//    puis un bandeau identique fait choisir l'arrivée ;
+// 1. un bandeau en bas de l'écran fait choisir la destination (adresse, position actuelle ou point sur la carte),
+//    puis un bandeau identique fait choisir le départ (ordre : voir lieuAChoisir) ;
 // 2. aperçu : la carte montre tout le trajet, le bandeau du bas donne distance, durée et heure d'arrivée,
 //    avec « ▶ Départ » pour lancer la navigation et « › Détail » (à gauche) pour le menu complet
 //    (étapes, options « Éviter », simulation…). Une étape ajoutée se choisit avec le même bandeau.
@@ -906,10 +956,18 @@ function majApercu() {
 }
 setInterval(() => etatGps === "apercu" && majApercu(), 30000); // l'heure d'arrivée avance avec l'horloge
 
-// Ouvre le GPS à la bonne étape : départ à choisir, puis arrivée, sinon aperçu du trajet
+// Ordre de choix des lieux : d'abord la destination, ensuite le départ.
+// Renvoie le prochain lieu à choisir, ou null si les deux sont placés.
+function lieuAChoisir() {
+  if (!points.arrivee) return "arrivee";
+  if (!points.depart) return "depart";
+  return null;
+}
+
+// Ouvre le GPS à la bonne étape : arrivée à choisir, puis départ, sinon aperçu du trajet
 function ouvrirGps() {
-  if (!points.depart) return ouvrirSelection("depart");
-  if (!points.arrivee) return ouvrirSelection("arrivee");
+  const lieu = lieuAChoisir();
+  if (lieu) return ouvrirSelection(lieu);
   afficherApercu();
   if (!routeActive) calculerTrajet();
 }
@@ -925,8 +983,8 @@ function fermerGps() {
 
 // Un lieu vient d'être choisi : lieu suivant à choisir, ou trajet calculé et montré en entier
 function lieuChoisi() {
-  if (!points.depart) return ouvrirSelection("depart");
-  if (!points.arrivee) return ouvrirSelection("arrivee");
+  const lieu = lieuAChoisir();
+  if (lieu) return ouvrirSelection(lieu);
   afficherApercu();
   calculerTrajet();
 }

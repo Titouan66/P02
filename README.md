@@ -40,7 +40,7 @@ Pas de bibliothèque hormis MapLibre. JavaScript natif, pas de modules : tout pa
 
 | Service | Utilisation |
 |---|---|
-| OpenFreeMap (`tiles.openfreemap.org`) | Tuiles vectorielles de la carte (schéma OpenMapTiles). Le style est défini dans `main.js` (palette `COULEURS`). |
+| OpenFreeMap (`tiles.openfreemap.org`) | Tuiles vectorielles de la carte (schéma OpenMapTiles) et polices des noms de villes (`/fonts`). Le style est défini dans `main.js` (palette `COULEURS`). |
 | Valhalla, serveur public OSM (`valhalla1.openstreetmap.de`) | `/route` : itinéraire et manœuvres (avec péages/autoroutes à éviter). `/trace_attributes` : limitations de vitesse et feux. `/sources_to_targets` : matrice de temps pour mesurer les détours vers les stations. |
 | Overpass (`overpass-api.de` + 2 miroirs) | Panneaux stop près du trajet. Serveurs souvent saturés : en cas d'échec, les stops ne s'affichent pas, sans bloquer le reste. |
 | Nominatim (OSM) | Géocodage d'une adresse saisie pour l'itinéraire. |
@@ -52,8 +52,9 @@ Aucune clé n'est nécessaire. Ces services publics ont des quotas : à ménager
 ## Fonctionnalités : système GPS (`main.js`)
 
 - **Carte** MapLibre centrée sur Paris, avec contrôles de zoom et de rotation.
+  - En dessous du zoom 13 (`ZOOM_BATIMENTS`), les bâtiments ne s'affichent pas. La carte montre à la place les **zones urbaines en gris plus foncé** (couche `urbain`) et les **noms des villes** (couche `noms-villes`, en français si possible, grandes villes prioritaires). Les deux s'effacent en fondu entre les zooms 12,5 et 13.
 - **Parcours du bouton « GPS »** (pensé pour le téléphone : la carte reste visible). Le code se trouve dans la section « Interface du GPS » de `main.js` : `ouvrirGps`, `ouvrirSelection`, `afficherApercu`. Les états sont `etatGps` (`ferme`, `selection`, `apercu`) et les classes `selection`, `apercu`, `navigation` et `detail` sur `<body>`.
-  1. Un **bandeau en bas** fait choisir le **départ**. De gauche à droite : un champ d'adresse (validé par la touche Entrée), le bouton ⌖ (position actuelle) et le bouton 📍 (le prochain toucher sur la carte place le point). Un bandeau identique fait ensuite choisir l'**arrivée**. Le ✕ annule.
+  1. Un **bandeau en bas** fait choisir la **destination** (l'arrivée). De gauche à droite : un champ d'adresse (validé par la touche Entrée), le bouton ⌖ (position actuelle) et le bouton 📍 (le prochain toucher sur la carte place le point). Un bandeau identique fait ensuite choisir le **départ**. L'ordre est fixé dans `lieuAChoisir`. Le ✕ annule.
   2. **Aperçu** : la carte se recadre sur tout le trajet. Le bandeau du bas affiche la distance, la durée et l'heure d'arrivée, avec « ▶ Départ » à la place de « Arrêter ». À sa gauche, « › Détail » ouvre le menu complet : champs, étapes, onglet « Éviter », simulation, Calculer / Effacer.
   3. « + Ajouter une étape » ouvre le même bandeau pour choisir l'étape.
   4. « Arrêter » ramène à l'aperçu. Re-toucher « GPS » range tout, mais le trajet reste sur la carte.
@@ -93,7 +94,7 @@ Ce module est issu d'un projet précédent (« P01 ») et a été intégré à l
 
 - **Chargement** : au démarrage, toutes les stations de France (~10 000, ~1 Mo compressé) sont téléchargées en une fois puis filtrées localement. Les prix sont rechargés toutes les 10 minutes. Les stations sont **harmonisées** par `harmoniser()` : id, coordonnées, adresse, prix et date de mise à jour par carburant.
 - **Carburants** : SP95, SP98, Gazole, E10, E85, GPL (le champ de l'API est `gplc_*`, voir `CHAMPS_API`).
-- **Affichage** : marqueurs HTML avec le prix (posés sur la carte sans toucher au style). On n'affiche que les **50 stations les plus proches du centre de la carte** parmi celles visibles, et **aucune sous le zoom 11**.
+- **Affichage** : marqueurs HTML avec le prix (posés sur la carte sans toucher au style). Les bulles s'affichent **à partir du zoom 9** (`ZOOM_MIN`). Au plus 50 bulles, les plus proches du centre de la carte, et jamais deux bulles qui se chevauchent : la plus proche du centre l'emporte (`sansChevauchement`). La liste du menu donne les 50 stations les plus proches du centre.
 - **Filtre de prix** : curseur « Prix max » dont les bornes sont les percentiles 1 % et 99 % sur toute la France, pour écarter les prix aberrants.
 - **Recherche d'un lieu** : ville, code postal, département ou adresse (Base Adresse Nationale), ou bouton 📍 pour se localiser. La liste des stations trouvées est repliée par défaut, pour garder la carte visible : le bouton « › Afficher la liste » la déplie. Les bulles de prix restent sur la carte dans les deux cas.
 - **Bulle d'information** d'une station : nom, adresse, prix, date de relevé. Hors navigation, un bouton « 🧭 Y aller » en fait la destination (`allerA`), et si une arrivée est déjà définie, « ➕ Ajouter au trajet » l'insère comme étape. Depuis la liste « sur le trajet », la bulle affiche le détour et ne propose que l'ajout comme étape, à la bonne place (`ajouterAuTrajet`), avec recalcul de l'itinéraire.

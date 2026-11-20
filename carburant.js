@@ -16,7 +16,11 @@
   const URL_ADRESSE = "https://data.geopf.fr/geocodage/search/"; // Base Adresse Nationale
 
   const MAX_STATIONS = 50; // nombre maximum de stations affichées
-  const ZOOM_MIN = 11; // en dessous, aucune station n'est affichée
+  const ZOOM_MIN = 9; // en dessous, aucune station n'est affichée
+  // Taille d'une bulle de prix à l'écran (px) : deux bulles qui se chevaucheraient ne sont pas affichées
+  // ensemble (la plus proche du centre gagne), sinon la carte dézoomée devient illisible
+  const BULLE_LARGEUR = 66;
+  const BULLE_HAUTEUR = 30;
   const RECHARGER_TOUTES_LES_MS = 10 * 60 * 1000; // les prix sont mis à jour toutes les ~10 min
 
   const LIBELLES = { sp95: "SP95", sp98: "SP98", gazole: "Gazole", e10: "E10", e85: "E85", gpl: "GPL" };
@@ -324,12 +328,27 @@
     candidats.sort((x, y) => x.d2 - y.d2);
     const visibles = candidats.slice(0, MAX_STATIONS).map((x) => x.s);
 
-    afficherMarqueurs(visibles);
+    afficherMarqueurs(sansChevauchement(candidats.map((x) => x.s)));
     afficherListe(visibles, centre);
     ui.statut.textContent =
       candidats.length > MAX_STATIONS
         ? `${LIBELLES[carburant]} : les ${MAX_STATIONS} stations les plus proches du centre (${candidats.length} dans la zone).`
         : `${LIBELLES[carburant]} : ${visibles.length} station(s) dans la zone.`;
+  }
+
+  // Bulles à poser sur la carte : on parcourt les stations de la plus proche du centre à la plus lointaine
+  // et on garde celles qui ne chevauchent aucune bulle déjà gardée (au plus MAX_STATIONS)
+  function sansChevauchement(triees) {
+    const gardees = [];
+    const places = []; // positions à l'écran des bulles gardées
+    for (const s of triees) {
+      if (gardees.length >= MAX_STATIONS) break;
+      const { x, y } = map.project([s.lng, s.lat]);
+      if (places.some((p) => Math.abs(p.x - x) < BULLE_LARGEUR && Math.abs(p.y - y) < BULLE_HAUTEUR)) continue;
+      gardees.push(s);
+      places.push({ x, y });
+    }
+    return gardees;
   }
 
   map.on("moveend", rafraichir);
